@@ -1,0 +1,6 @@
+{
+  "name": "AlMoosa HR Tasks",
+  "description": "Internal bilingual task assignment and tracking system for AlMoosa Trading Company with role-based access control, employee directory, and audit logs.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

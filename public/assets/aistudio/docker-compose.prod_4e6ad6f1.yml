@@ -1,0 +1,56 @@
+version: "3.9"
+
+# Reference production topology: compiled backend image + static nginx
+# frontend image, both built from their own Dockerfiles, behind whatever
+# TLS-terminating reverse proxy or load balancer the deployment target
+# provides (not included here — see README.md "Deployment").
+#
+# Usage:
+#   docker compose -f docker-compose.prod.yml --env-file backend/.env up -d --build
+#   docker compose -f docker-compose.prod.yml exec backend node dist/db/migrate.js
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: hrtasks
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set a real password}
+      POSTGRES_DB: hrtasks
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hrtasks"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env
+    environment:
+      DATABASE_URL: postgresql://hrtasks:${POSTGRES_PASSWORD:?set a real password}@db:5432/hrtasks
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - uploads_data:/app/uploads
+    expose:
+      - "4000"
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_URL: ${VITE_API_URL:-https://your-domain.example/api}
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "80:80"
+
+volumes:
+  db_data:
+  uploads_data:

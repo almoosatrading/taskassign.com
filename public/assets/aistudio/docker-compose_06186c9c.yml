@@ -1,0 +1,27 @@
+version: "3.9"
+
+# Local development database only. The backend and frontend run natively
+# (npm run dev) for fast hot-reload — see README.md "Local development".
+# For an actual deployment, build backend/Dockerfile and frontend/Dockerfile
+# separately (they produce a compiled API image and a static nginx image,
+# which is a different shape than a hot-reloading dev container).
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: hrtasks
+      POSTGRES_PASSWORD: hrtasks_dev_password
+      POSTGRES_DB: hrtasks
+    ports:
+      - "5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hrtasks"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  db_data:
