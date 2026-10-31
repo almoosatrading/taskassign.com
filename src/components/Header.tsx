@@ -11,6 +11,7 @@ import {
   CheckCircle2,
   AlertCircle,
   ExternalLink,
+  LogOut,
 } from 'lucide-react';
 import { Language, NotificationItem, User } from '../types';
 import { translations } from '../i18n/translations';
@@ -25,6 +26,7 @@ interface HeaderProps {
   notifications: NotificationItem[];
   onMarkNotificationsRead: () => void;
   onSelectTaskFromNotif?: (taskId: string) => void;
+  onSignOut?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -33,9 +35,10 @@ export const Header: React.FC<HeaderProps> = ({
   onSwitchUser,
   language,
   onToggleLanguage,
-  notifications,
+  notifications = [],
   onMarkNotificationsRead,
   onSelectTaskFromNotif,
+  onSignOut,
 }) => {
   const t = translations[language];
   const [userMenuOpen, setUserMenuOpen] = useState(false);
@@ -264,9 +267,36 @@ export const Header: React.FC<HeaderProps> = ({
                       );
                     })}
                   </div>
+
+                  {onSignOut && (
+                    <div className="pt-2 mt-2 border-t border-slate-100 dark:border-slate-700">
+                      <button
+                        onClick={() => {
+                          setUserMenuOpen(false);
+                          onSignOut();
+                        }}
+                        className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-bold text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors cursor-pointer"
+                      >
+                        <LogOut className="w-4 h-4" />
+                        <span>{language === 'ar' ? 'تسجيل الخروج الآمن' : 'Secure Sign Out'}</span>
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
+
+            {/* Quick Sign Out Header Button */}
+            {onSignOut && (
+              <button
+                onClick={onSignOut}
+                title={language === 'ar' ? 'تسجيل الخروج' : 'Sign Out'}
+                aria-label={language === 'ar' ? 'تسجيل الخروج' : 'Sign Out'}
+                className="p-2 rounded-xl text-slate-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 border border-slate-200 dark:border-slate-700 transition-colors cursor-pointer"
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
+            )}
           </div>
         </div>
       </div>

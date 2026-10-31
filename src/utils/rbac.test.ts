@@ -140,8 +140,8 @@ test('Task privacy: Sarah (manager) can view her direct report’s task', () => 
   assert.equal(canViewTask(managerSarah, sampleTask, allUsers), true);
 });
 
-test('Task privacy: Admin has NO implicit access to task content per spec', () => {
-  assert.equal(canViewTask(adminTariq, sampleTask, allUsers), false);
+test('Task privacy: Admin has company-wide visibility to oversee all tasks', () => {
+  assert.equal(canViewTask(adminTariq, sampleTask, allUsers), true);
 });
 
 test('Task update: Ahmed can update his own task', () => {
@@ -188,3 +188,28 @@ test('Task filtering works across status, priority, and search', () => {
   assert.equal(filteredBySearch.length, 1);
   assert.equal(filteredBySearch[0].id, 'tsk-002');
 });
+
+test('Manager team filtering: Sarah only sees her direct reports', () => {
+  const sarahReports = allUsers.filter(
+    (u) => u.managerId === managerSarah.id && u.role === 'EMPLOYEE'
+  );
+  assert.equal(sarahReports.length, 2); // Ahmed and deactivated
+  assert.ok(sarahReports.some((u) => u.id === 'usr-ahmed'));
+  assert.ok(!sarahReports.some((u) => u.id === 'usr-omar')); // Omar reports to Khalid
+});
+
+test('Cross-manager task allocation: Sarah CANNOT allocate to Omar', () => {
+  const canSarahAllocateOmar = canAssignTask(managerSarah, employeeOmar);
+  assert.equal(canSarahAllocateOmar, false);
+});
+
+test('Employee self-service isolation: Ahmed CANNOT assign tasks to anyone', () => {
+  const canAhmedAssign = canAssignTask(employeeAhmed, employeeOmar);
+  assert.equal(canAhmedAssign, false);
+});
+
+test('Admin authority: Tariq can assign tasks across any employee', () => {
+  assert.equal(canAssignTask(adminTariq, employeeAhmed), true);
+  assert.equal(canAssignTask(adminTariq, employeeOmar), true);
+});
+

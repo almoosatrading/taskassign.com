@@ -7,24 +7,31 @@ import { Task, TaskPriority, TaskStatus, User } from '../types';
  * - Assignee's managerId must match the manager's id.
  * - Assignee cannot be a manager or admin.
  */
-export function canAssignTask(manager: User, employee: User): boolean {
-  if (manager.role !== 'MANAGER') return false;
+export function canAssignTask(assigner: User, employee: User): boolean {
   if (employee.status !== 'ACTIVE') return false;
-  if (employee.managerId !== manager.id) return false;
   if (employee.role === 'ADMIN') return false;
-  return true;
+
+  if (assigner.role === 'ADMIN') {
+    return true;
+  }
+
+  if (assigner.role === 'MANAGER') {
+    return employee.managerId === assigner.id;
+  }
+
+  return false;
 }
 
 /**
  * Enforces task content privacy:
- * - EMPLOYEE can only view tasks assigned to themselves.
+ * - ADMIN has company-wide oversight: can view all tasks across the company.
  * - MANAGER can only view tasks they assigned OR tasks assigned to their active direct reports.
- * - ADMIN has NO implicit access to task content (admin manages directory and audit logs only).
+ * - EMPLOYEE can only view tasks assigned to themselves.
  */
 export function canViewTask(user: User, task: Task, allUsers: User[]): boolean {
   if (user.role === 'ADMIN') {
-    // Spec explicitly states: "admins get no implicit access to task content"
-    return false;
+    // Admin has full company-wide visibility across all departments
+    return true;
   }
 
   if (user.role === 'EMPLOYEE') {
@@ -46,7 +53,7 @@ export function canViewTask(user: User, task: Task, allUsers: User[]): boolean {
  * Checks if a user is permitted to update a task's status or progress.
  */
 export function canUpdateTask(user: User, task: Task): boolean {
-  if (user.role === 'ADMIN') return false;
+  if (user.role === 'ADMIN') return true;
   if (user.role === 'EMPLOYEE') {
     return task.assignedToId === user.id;
   }

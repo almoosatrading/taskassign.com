@@ -69,7 +69,7 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
       assignedToId,
       assignedById: currentUser.id,
       priority,
-      status: 'PENDING',
+      status: 'ASSIGNED',
       category,
       dueDate: isoDueDate,
       progress: 0,

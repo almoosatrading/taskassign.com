@@ -106,9 +106,9 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
   };
 
   const lifecycleSteps: { status: TaskStatus; label: string }[] = [
-    { status: 'PENDING', label: t.statusPending },
+    { status: 'ASSIGNED', label: t.statusAssigned },
     { status: 'IN_PROGRESS', label: t.statusInProgress },
-    { status: 'UNDER_REVIEW', label: t.statusUnderReview },
+    { status: 'ON_HOLD', label: t.statusOnHold },
     { status: 'COMPLETED', label: t.statusCompleted },
   ];
 
@@ -264,7 +264,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
 
               {/* Action Buttons depending on role */}
               <div className="flex items-center gap-2 flex-wrap">
-                {isAssignee && task.status === 'PENDING' && (
+                {isAssignee && (task.status === 'ASSIGNED' || task.status === 'NEW' || task.status === 'PENDING') && (
                   <button
                     onClick={() => onUpdateStatus(task.id, 'IN_PROGRESS', Math.max(progressVal, 20))}
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs shadow-sm cursor-pointer"
@@ -276,15 +276,15 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
 
                 {isAssignee && task.status === 'IN_PROGRESS' && (
                   <button
-                    onClick={() => onUpdateStatus(task.id, 'UNDER_REVIEW', Math.max(progressVal, 90))}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-semibold text-xs shadow-sm cursor-pointer"
+                    onClick={() => onUpdateStatus(task.id, 'COMPLETED', 100)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs shadow-sm cursor-pointer"
                   >
                     <CheckCircle2 className="w-3.5 h-3.5" />
-                    {t.submitReview}
+                    {t.markComplete}
                   </button>
                 )}
 
-                {isManager && (
+                {(isManager || currentUser.role === 'ADMIN') && (
                   <>
                     <button
                       onClick={() => onUpdateStatus(task.id, 'COMPLETED', 100)}
@@ -293,7 +293,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                       <CheckCircle2 className="w-3.5 h-3.5" />
                       {t.approveCompletion}
                     </button>
-                    {task.status !== 'IN_PROGRESS' && task.status !== 'PENDING' && (
+                    {task.status !== 'IN_PROGRESS' && (
                       <button
                         onClick={() => onUpdateStatus(task.id, 'IN_PROGRESS', Math.min(progressVal, 50))}
                         className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-semibold text-xs shadow-sm cursor-pointer"
@@ -394,10 +394,10 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                 href={whatsappUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-xs transition-colors cursor-pointer"
+                className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs transition-colors cursor-pointer"
               >
-                <ExternalLink className="w-3.5 h-3.5" />
-                {t.openWhatsApp}
+                <Share2 className="w-4 h-4" />
+                {t.shareWhatsApp}
               </a>
               <button
                 onClick={handleCopyShareLink}

@@ -14,19 +14,39 @@ import {
   Check,
   X,
   AlertCircle,
+  Edit3,
+  Trash2,
+  Lock,
+  Camera,
+  Upload,
+  Image as ImageIcon,
+  Sparkles,
 } from 'lucide-react';
-import { Language, User, UserRole } from '../types';
+import { Language, User, UserRole, AccountStatus } from '../types';
 import { translations } from '../i18n/translations';
-import { RoleBadge } from './Badge';
+import { AccountStatusBadge, RoleBadge } from './Badge';
+
+const PRESET_AVATARS = [
+  'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=256&auto=format&fit=crop&q=80',
+  'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=256&auto=format&fit=crop&q=80',
+  'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=256&auto=format&fit=crop&q=80',
+  'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=256&auto=format&fit=crop&q=80',
+  'https://images.unsplash.com/photo-1580489944761-15a19d654956?w=256&auto=format&fit=crop&q=80',
+  'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=256&auto=format&fit=crop&q=80',
+  'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=256&auto=format&fit=crop&q=80',
+  'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=256&auto=format&fit=crop&q=80',
+];
 
 interface EmployeeDirectoryProps {
   users: User[];
   currentUser: User;
   language: Language;
-  onAddEmployee: (newUser: Omit<User, 'id'>) => void;
-  onToggleStatus: (userId: string) => void;
-  onResetPassword: (userId: string) => string; // returns generated temporary password
-  onChangeRole: (userId: string, newRole: UserRole) => void;
+  onAddEmployee: (newUser: Omit<User, 'id'> & { temporaryPassword?: string }) => void;
+  onUpdateEmployee: (id: string, updates: Partial<User>) => void;
+  onUpdateAvatar?: (userId: string, avatar: string) => Promise<void>;
+  onToggleStatus: (userId: string, newStatus: AccountStatus) => void;
+  onResetPassword: (userId: string) => Promise<string>;
+  onDeleteUser: (userId: string) => void;
 }
 
 export const EmployeeDirectory: React.FC<EmployeeDirectoryProps> = ({
@@ -34,17 +54,20 @@ export const EmployeeDirectory: React.FC<EmployeeDirectoryProps> = ({
   currentUser,
   language,
   onAddEmployee,
+  onUpdateEmployee,
   onToggleStatus,
   onResetPassword,
-  onChangeRole,
+  onDeleteUser,
 }) => {
   const t = translations[language];
   const isAdmin = currentUser.role === 'ADMIN';
 
   const [search, setSearch] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
+  const [editingUser, setEditingUser] = useState<User | null>(null);
   const [tempPassAlert, setTempPassAlert] = useState<{ user: User; pass: string } | null>(null);
   const [copiedPass, setCopiedPass] = useState(false);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
   // New Employee Form State
   const [name, setName] = useState('');
@@ -57,6 +80,20 @@ export const EmployeeDirectory: React.FC<EmployeeDirectoryProps> = ({
   const [jobTitle, setJobTitle] = useState('');
   const [jobTitleAr, setJobTitleAr] = useState('');
   const [managerId, setManagerId] = useState<string>('usr-sarah');
+  const [initialStatus, setInitialStatus] = useState<AccountStatus>('ACTIVE');
+
+  // Edit Employee Form State
+  const [editName, setEditName] = useState('');
+  const [editNameAr, setEditNameAr] = useState('');
+  const [editEmployeeId, setEditEmployeeId] = useState('');
+  const [editDepartment, setEditDepartment] = useState('');
+  const [editDepartmentAr, setEditDepartmentAr] = useState('');
+  const [editJobTitle, setEditJobTitle] = useState('');
+  const [editJobTitleAr, setEditJobTitleAr] = useState('');
+  const [editRole, setEditRole] = useState<UserRole>('EMPLOYEE');
+  const [editManagerId, setEditManagerId] = useState<string>('');
+
+  const managersList = users.filter((u) => u.role === 'MANAGER' || u.role === 'ADMIN');
 
   const filteredUsers = users.filter((u) => {
     if (!search.trim()) return true;
@@ -66,13 +103,50 @@ export const EmployeeDirectory: React.FC<EmployeeDirectoryProps> = ({
       u.nameAr.toLowerCase().includes(q) ||
       u.email.toLowerCase().includes(q) ||
       u.employeeId.toLowerCase().includes(q) ||
-      u.jobTitle.toLowerCase().includes(q)
+      u.jobTitle.toLowerCase().includes(q) ||
+      u.department.toLowerCase().includes(q)
     );
   });
 
-  const handleResetPasswordClick = (user: User) => {
-    const tempPass = onResetPassword(user.id);
-    setTempPassAlert({ user, pass: tempPass });
+  const handleResetPasswordClick = async (user: User) => {
+    try {
+      const tempPass = await onResetPassword(user.id);
+      setTempPassAlert({ user, pass: tempPass });
+    } catch (err: any) {
+      alert(err.message || 'Failed to reset password');
+    }
+  };
+
+  const handleOpenEdit = (user: User) => {
+    setEditingUser(user);
+    setEditName(user.name);
+    setEditNameAr(user.nameAr);
+    setEditEmployeeId(user.employeeId);
+    setEditDepartment(user.department);
+    setEditDepartmentAr(user.departmentAr);
+    setEditJobTitle(user.jobTitle);
+    setEditJobTitleAr(user.jobTitleAr);
+    setEditRole(user.role);
+    setEditManagerId(user.managerId || '');
+  };
+
+  const handleSaveEdit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingUser) return;
+
+    onUpdateEmployee(editingUser.id, {
+      name: editName.trim(),
+      nameAr: editNameAr.trim() || editName.trim(),
+      employeeId: editEmployeeId.trim().toUpperCase(),
+      department: editDepartment.trim(),
+      departmentAr: editDepartmentAr.trim() || editDepartment.trim(),
+      jobTitle: editJobTitle.trim(),
+      jobTitleAr: editJobTitleAr.trim() || editJobTitle.trim(),
+      role: editRole,
+      managerId: editRole === 'ADMIN' ? null : editManagerId || null,
+    });
+
+    setEditingUser(null);
   };
 
   const handleAddSubmit = (e: React.FormEvent) => {
@@ -83,15 +157,15 @@ export const EmployeeDirectory: React.FC<EmployeeDirectoryProps> = ({
       name: name.trim(),
       nameAr: nameAr.trim() || name.trim(),
       email: email.trim(),
-      employeeId: employeeId.trim(),
+      employeeId: employeeId.trim().toUpperCase(),
       role,
       department: department.trim(),
       departmentAr: departmentAr.trim() || department.trim(),
       jobTitle: jobTitle.trim(),
       jobTitleAr: jobTitleAr.trim() || jobTitle.trim(),
       managerId: role === 'ADMIN' ? null : managerId || null,
-      avatar: `https://images.unsplash.com/photo-${1534528741775 + Math.floor(Math.random() * 500)}?w=150`,
-      status: 'ACTIVE',
+      avatar: `https://images.unsplash.com/photo-${1534528741775 + Math.floor(Math.random() * 500)}?w=150&auto=format&fit=crop&q=80`,
+      status: initialStatus,
       mustChangePassword: true,
     });
 
@@ -104,8 +178,6 @@ export const EmployeeDirectory: React.FC<EmployeeDirectoryProps> = ({
     setJobTitle('');
     setJobTitleAr('');
   };
-
-  const managersList = users.filter((u) => u.role === 'MANAGER' || u.role === 'ADMIN');
 
   return (
     <div className="space-y-6">
@@ -132,18 +204,18 @@ export const EmployeeDirectory: React.FC<EmployeeDirectoryProps> = ({
 
       {/* Temporary Password Notification Alert */}
       {tempPassAlert && (
-        <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 flex items-center justify-between gap-3">
+        <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 flex items-center justify-between gap-3 animate-in fade-in">
           <div className="flex items-center gap-2.5">
             <KeyRound className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0" />
             <div>
               <span className="text-xs font-bold text-amber-900 dark:text-amber-200">
                 {t.passwordResetAlert} {language === 'ar' ? tempPassAlert.user.nameAr : tempPassAlert.user.name}:
               </span>
-              <span className="font-mono font-extrabold text-sm ml-2 bg-white dark:bg-slate-900 px-2 py-0.5 rounded border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-300">
+              <span className="font-mono font-extrabold text-sm ml-2 bg-white dark:bg-slate-900 px-2.5 py-0.5 rounded border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-300">
                 {tempPassAlert.pass}
               </span>
               <p className="text-[11px] text-amber-700 dark:text-amber-400 mt-0.5">
-                {t.temporaryPasswordNote}
+                {t.passwordCopied}
               </p>
             </div>
           </div>
@@ -183,7 +255,7 @@ export const EmployeeDirectory: React.FC<EmployeeDirectoryProps> = ({
         />
       </div>
 
-      {/* Table */}
+      {/* Directory Table */}
       <div className="bg-white dark:bg-slate-800/90 rounded-2xl border border-slate-200/90 dark:border-slate-700/80 shadow-xs overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-xs text-start">
@@ -202,11 +274,13 @@ export const EmployeeDirectory: React.FC<EmployeeDirectoryProps> = ({
               {filteredUsers.map((emp) => {
                 const manager = users.find((m) => m.id === emp.managerId);
                 const isDeactivated = emp.status === 'DEACTIVATED';
+                const isSuspended = emp.status === 'SUSPENDED';
+
                 return (
                   <tr
                     key={emp.id}
                     className={`hover:bg-slate-50/70 dark:hover:bg-slate-700/40 transition-colors ${
-                      isDeactivated ? 'opacity-60 bg-slate-50/50 dark:bg-slate-800/30' : ''
+                      isDeactivated || isSuspended ? 'opacity-60 bg-slate-50/50 dark:bg-slate-800/30' : ''
                     }`}
                   >
                     <td className="px-4 py-3 font-mono font-bold text-slate-600 dark:text-slate-400">
@@ -248,22 +322,21 @@ export const EmployeeDirectory: React.FC<EmployeeDirectoryProps> = ({
                       )}
                     </td>
                     <td className="px-4 py-3">
-                      <span
-                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold ${
-                          !isDeactivated
-                            ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
-                            : 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300'
-                        }`}
-                      >
-                        <span
-                          className={`w-1.5 h-1.5 rounded-full ${!isDeactivated ? 'bg-emerald-500' : 'bg-rose-500'}`}
-                        />
-                        {!isDeactivated ? t.activeStatus : t.deactivatedStatus}
-                      </span>
+                      <AccountStatusBadge status={emp.status} lang={language} />
                     </td>
+
+                    {/* Admin Actions: Edit, Password Reset, Status Toggle, Delete */}
                     {isAdmin && (
                       <td className="px-4 py-3 text-end">
                         <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            onClick={() => handleOpenEdit(emp)}
+                            title={t.editUserBtn}
+                            className="p-1.5 rounded-lg text-slate-500 hover:text-emerald-600 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+                          >
+                            <Edit3 className="w-3.5 h-3.5" />
+                          </button>
+
                           <button
                             onClick={() => handleResetPasswordClick(emp)}
                             title={t.resetPasswordBtn}
@@ -271,16 +344,33 @@ export const EmployeeDirectory: React.FC<EmployeeDirectoryProps> = ({
                           >
                             <KeyRound className="w-3.5 h-3.5" />
                           </button>
+
+                          {/* Status Toggle Button */}
                           <button
-                            onClick={() => onToggleStatus(emp.id)}
-                            title={isDeactivated ? t.activateBtn : t.deactivateBtn}
+                            onClick={() =>
+                              onToggleStatus(emp.id, emp.status === 'ACTIVE' ? 'DEACTIVATED' : 'ACTIVE')
+                            }
+                            title={emp.status === 'ACTIVE' ? t.deactivateBtn : t.activateBtn}
                             className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
-                              isDeactivated
-                                ? 'text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/40'
-                                : 'text-slate-500 hover:text-rose-600 hover:bg-slate-100 dark:hover:bg-slate-700'
+                              emp.status === 'ACTIVE'
+                                ? 'text-slate-500 hover:text-rose-600 hover:bg-slate-100 dark:hover:bg-slate-700'
+                                : 'text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/40'
                             }`}
                           >
-                            {isDeactivated ? <UserCheck className="w-3.5 h-3.5" /> : <UserX className="w-3.5 h-3.5" />}
+                            {emp.status === 'ACTIVE' ? <UserX className="w-3.5 h-3.5" /> : <UserCheck className="w-3.5 h-3.5" />}
+                          </button>
+
+                          {/* Remove User */}
+                          <button
+                            onClick={() => {
+                              if (window.confirm(t.confirmDeleteUser)) {
+                                onDeleteUser(emp.id);
+                              }
+                            }}
+                            title={t.removeBtn}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
                           </button>
                         </div>
                       </td>
@@ -293,7 +383,7 @@ export const EmployeeDirectory: React.FC<EmployeeDirectoryProps> = ({
         </div>
       </div>
 
-      {/* Add Employee Modal */}
+      {/* CREATE EMPLOYEE MODAL */}
       {showAddModal && (
         <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6">
           <div
@@ -326,7 +416,7 @@ export const EmployeeDirectory: React.FC<EmployeeDirectoryProps> = ({
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                     placeholder="e.g. Faisal Al-Harbi"
-                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700"
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white"
                   />
                 </div>
                 <div>
@@ -338,7 +428,7 @@ export const EmployeeDirectory: React.FC<EmployeeDirectoryProps> = ({
                     value={nameAr}
                     onChange={(e) => setNameAr(e.target.value)}
                     placeholder="مثال: فيصل الحربي"
-                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700"
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white"
                   />
                 </div>
               </div>
@@ -354,7 +444,7 @@ export const EmployeeDirectory: React.FC<EmployeeDirectoryProps> = ({
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="f.harbi@almoosa.com.sa"
-                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700"
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white"
                   />
                 </div>
                 <div>
@@ -367,7 +457,7 @@ export const EmployeeDirectory: React.FC<EmployeeDirectoryProps> = ({
                     value={employeeId}
                     onChange={(e) => setEmployeeId(e.target.value)}
                     placeholder="EMP-0240"
-                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 font-mono"
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-mono"
                   />
                 </div>
               </div>
@@ -383,7 +473,7 @@ export const EmployeeDirectory: React.FC<EmployeeDirectoryProps> = ({
                     value={jobTitle}
                     onChange={(e) => setJobTitle(e.target.value)}
                     placeholder="e.g. Sales Coordinator"
-                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700"
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white"
                   />
                 </div>
                 <div>
@@ -393,11 +483,39 @@ export const EmployeeDirectory: React.FC<EmployeeDirectoryProps> = ({
                   <select
                     value={role}
                     onChange={(e) => setRole(e.target.value as UserRole)}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700"
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white cursor-pointer"
                   >
                     <option value="EMPLOYEE">{t.employee}</option>
                     <option value="MANAGER">{t.manager}</option>
                     <option value="ADMIN">{t.admin}</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    {t.colDepartment}
+                  </label>
+                  <input
+                    type="text"
+                    value={department}
+                    onChange={(e) => setDepartment(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    {t.accountStatusLabel}
+                  </label>
+                  <select
+                    value={initialStatus}
+                    onChange={(e) => setInitialStatus(e.target.value as AccountStatus)}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white cursor-pointer"
+                  >
+                    <option value="ACTIVE">{t.statusActive} (Pre-approved)</option>
+                    <option value="PENDING_APPROVAL">{t.statusPendingApproval}</option>
+                    <option value="INVITED">{t.statusInvited}</option>
                   </select>
                 </div>
               </div>
@@ -410,7 +528,7 @@ export const EmployeeDirectory: React.FC<EmployeeDirectoryProps> = ({
                   <select
                     value={managerId}
                     onChange={(e) => setManagerId(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700"
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white cursor-pointer"
                   >
                     {managersList.map((m) => (
                       <option key={m.id} value={m.id}>
@@ -422,7 +540,7 @@ export const EmployeeDirectory: React.FC<EmployeeDirectoryProps> = ({
               )}
 
               <p className="text-[11px] text-slate-400 bg-slate-50 dark:bg-slate-800 p-2.5 rounded-xl border border-slate-200 dark:border-slate-700">
-                ℹ️ {t.temporaryPasswordNote}
+                ℹ️ Accounts are created through the secure server process. Passwords are never stored in plaintext.
               </p>
 
               <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex justify-end gap-2">
@@ -438,6 +556,158 @@ export const EmployeeDirectory: React.FC<EmployeeDirectoryProps> = ({
                   className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold cursor-pointer"
                 >
                   {t.confirmCreateEmployee}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* EDIT EMPLOYEE & TRANSFER MANAGER MODAL */}
+      {editingUser && (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="edit-emp-title"
+            className="relative bg-white dark:bg-slate-900 rounded-3xl max-w-lg w-full shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col"
+          >
+            <div className="px-6 py-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50/70 dark:bg-slate-800/40">
+              <div>
+                <h3 id="edit-emp-title" className="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white">
+                  {t.editEmployeeModalTitle}
+                </h3>
+                <p className="text-xs text-slate-400">{editingUser.email}</p>
+              </div>
+              <button
+                onClick={() => setEditingUser(null)}
+                className="p-2 text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEdit} className="p-6 space-y-3.5 text-xs">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    {t.fullNameLabel}
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    {t.fullNameArLabel}
+                  </label>
+                  <input
+                    type="text"
+                    value={editNameAr}
+                    onChange={(e) => setEditNameAr(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    {t.employeeIdLabel}
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editEmployeeId}
+                    onChange={(e) => setEditEmployeeId(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    {t.colRole}
+                  </label>
+                  <select
+                    value={editRole}
+                    onChange={(e) => setEditRole(e.target.value as UserRole)}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white cursor-pointer"
+                  >
+                    <option value="EMPLOYEE">{t.employee}</option>
+                    <option value="MANAGER">{t.manager}</option>
+                    <option value="ADMIN">{t.admin}</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    {t.jobTitleLabel}
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editJobTitle}
+                    onChange={(e) => setEditJobTitle(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    {t.colDepartment}
+                  </label>
+                  <input
+                    type="text"
+                    value={editDepartment}
+                    onChange={(e) => setEditDepartment(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white"
+                  />
+                </div>
+              </div>
+
+              {/* Manager Assignment / Transfer */}
+              {editRole !== 'ADMIN' && (
+                <div>
+                  <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    {t.colManager} (Reporting Line)
+                  </label>
+                  <select
+                    value={editManagerId}
+                    onChange={(e) => setEditManagerId(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white cursor-pointer"
+                  >
+                    <option value="">{t.noneTopLevel}</option>
+                    {managersList
+                      .filter((m) => m.id !== editingUser.id)
+                      .map((m) => (
+                        <option key={m.id} value={m.id}>
+                          {m.name} ({m.jobTitle})
+                        </option>
+                      ))}
+                  </select>
+                  <p className="text-[10px] text-slate-400 mt-1">
+                    Transferring this employee to a new manager will update their task delegation authorization automatically.
+                  </p>
+                </div>
+              )}
+
+              <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingUser(null)}
+                  className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 font-bold cursor-pointer"
+                >
+                  {t.cancel}
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold cursor-pointer"
+                >
+                  {t.confirmSaveUser}
                 </button>
               </div>
             </form>

@@ -1,13 +1,30 @@
 /**
- * AlMoosa Trading Company - HR Task Manager
- * Core Type Definitions
+ * AlMoosa Trading Company - Secure HR Task Manager
+ * Core Full-Stack Type Definitions
  */
 
 export type UserRole = 'ADMIN' | 'MANAGER' | 'EMPLOYEE';
 
+export type AccountStatus =
+  | 'INVITED'
+  | 'PENDING_APPROVAL'
+  | 'ACTIVE'
+  | 'REJECTED'
+  | 'SUSPENDED'
+  | 'DEACTIVATED';
+
 export type TaskPriority = 'URGENT' | 'HIGH' | 'MEDIUM' | 'LOW';
 
-export type TaskStatus = 'PENDING' | 'IN_PROGRESS' | 'UNDER_REVIEW' | 'COMPLETED';
+export type TaskStatus =
+  | 'NEW'
+  | 'ASSIGNED'
+  | 'IN_PROGRESS'
+  | 'ON_HOLD'
+  | 'COMPLETED'
+  | 'CANCELLED'
+  | 'OVERDUE'
+  | 'PENDING'
+  | 'UNDER_REVIEW';
 
 export type TaskCategory =
   | 'HR_ONBOARDING'
@@ -31,8 +48,18 @@ export interface User {
   jobTitleAr: string;
   managerId: string | null;
   avatar: string;
-  status: 'ACTIVE' | 'DEACTIVATED';
+  status: AccountStatus;
   mustChangePassword?: boolean;
+  emailVerified?: boolean;
+  createdAt?: string;
+  createdBy?: string | null;
+  approvedBy?: string | null;
+  approvalDate?: string | null;
+  approvalNotes?: string | null;
+}
+
+export interface UserWithPasswordHash extends User {
+  passwordHash: string;
 }
 
 export interface TaskAttachment {
@@ -66,11 +93,13 @@ export interface Task {
   priority: TaskPriority;
   status: TaskStatus;
   category: TaskCategory;
-  dueDate: string; // ISO 8601
+  allocationDate?: string; // ISO
+  dueDate: string; // ISO
   createdAt: string;
   updatedAt: string;
   completedAt?: string | null;
   progress: number; // 0 - 100
+  position?: number; // Sorting sequence for employee task order
   attachments: TaskAttachment[];
   comments: TaskComment[];
 }
@@ -85,22 +114,30 @@ export interface AuditLog {
   actionAr: string;
   details: string;
   detailsAr: string;
-  category: 'AUTH' | 'TASK' | 'DIRECTORY' | 'SECURITY';
+  targetRecordId?: string | null;
+  category: 'AUTH' | 'TASK' | 'DIRECTORY' | 'APPROVAL' | 'SECURITY';
   status: 'SUCCESS' | 'DENIED';
   ipAddress: string;
 }
 
 export interface NotificationItem {
   id: string;
-  userId: string;
+  recipientUserId?: string;
+  userId?: string;
   title: string;
   titleAr: string;
   message: string;
   messageAr: string;
-  taskId?: string;
+  taskId?: string | null;
   read: boolean;
   createdAt: string;
-  type: 'ASSIGNMENT' | 'STATUS_CHANGE' | 'DEADLINE_ALERT' | 'SYSTEM';
+  readDate?: string | null;
+  type: 'ASSIGNMENT' | 'STATUS_CHANGE' | 'APPROVAL' | 'DEADLINE_ALERT' | 'SYSTEM';
 }
 
 export type Language = 'en' | 'ar';
+
+export interface AuthResponse {
+  token: string;
+  user: User;
+}
