@@ -11,13 +11,63 @@ import {
   clientLocalLogin,
   clientLocalGetMe,
   clientLocalGetUsers,
+  clientLocalCreateUser,
   clientLocalUpdateUser,
+  clientLocalDeleteUser,
+  clientLocalResetPassword,
+  clientLocalDecideApproval,
   clientLocalGetTasks,
+  clientLocalUpdateTaskStatus,
+  clientLocalAddTaskComment,
+  clientLocalAddTaskAttachment,
   clientLocalReorderTasks,
   clientLocalAllocateTask,
 } from './clientStore';
 
 const TOKEN_KEY = 'almoosa_hr_token';
+
+/**
+ * Universal error message extractor that guarantees a clean, human-readable string
+ * and prevents '[object Object]' or silent failures across all browser and network environments.
+ */
+export function extractErrorMessage(err: any): string {
+  if (!err) return 'An unexpected error occurred';
+  if (typeof err === 'string') {
+    if (err.includes('[object Object]')) {
+      return 'Operation failed. Please verify details and try again.';
+    }
+    return err.trim();
+  }
+  // Standard Error instance or object with message
+  if (typeof err.message === 'string' && err.message.trim() && err.message !== '[object Object]') {
+    return err.message.trim();
+  }
+  // Server error response wrapper: { data: { message: ... } }
+  if (err.data) {
+    if (typeof err.data.message === 'string' && err.data.message.trim()) return err.data.message.trim();
+    if (typeof err.data.error === 'string' && err.data.error.trim()) return err.data.error.trim();
+    if (typeof err.data === 'string' && err.data.trim()) return err.data.trim();
+  }
+  // Server error property: { error: '...' } or { error: { message: '...' } }
+  if (typeof err.error === 'string' && err.error.trim()) return err.error.trim();
+  if (err.error && typeof err.error === 'object') {
+    if (typeof err.error.message === 'string' && err.error.message.trim()) return err.error.message.trim();
+    if (typeof err.error.code === 'string' && err.error.code.trim()) return err.error.code.trim();
+  }
+  // Status or code
+  if (typeof err.code === 'string' && err.code.trim()) return err.code.trim();
+
+  try {
+    const serialized = JSON.stringify(err);
+    if (serialized && serialized !== '{}' && !serialized.includes('[object Object]')) {
+      return serialized;
+    }
+  } catch {
+    // ignore
+  }
+
+  return 'Operation failed. Please verify details and try again.';
+}
 
 export const apiClient = {
   getToken(): string | null {
@@ -51,7 +101,7 @@ export const apiClient = {
         headers,
       });
     } catch (err: any) {
-      const netError: any = new Error(err.message || 'Network request failed');
+      const netError: any = new Error(err?.message || 'Network request failed');
       netError.isNetworkError = true;
       throw netError;
     }
@@ -67,9 +117,20 @@ export const apiClient = {
     const data = await response.json().catch(() => ({}));
 
     if (!response.ok) {
-      const error: any = new Error(data.message || data.error || `Request failed (${response.status})`);
+      let rawMsg = '';
+      if (typeof data.message === 'string' && data.message.trim()) {
+        rawMsg = data.message.trim();
+      } else if (typeof data.error === 'string' && data.error.trim()) {
+        rawMsg = data.error.trim();
+      } else if (data.error && typeof data.error === 'object') {
+        rawMsg = data.error.message || data.error.code || `Request failed (${response.status})`;
+      } else {
+        rawMsg = `Request failed (${response.status})`;
+      }
+
+      const error: any = new Error(rawMsg);
       error.status = response.status;
-      error.code = data.error;
+      error.code = typeof data.error === 'string' ? data.error : data.error?.code || 'ERROR';
       error.accountStatus = data.status;
       error.user = data.user;
       throw error;
@@ -152,11 +213,21 @@ export const apiClient = {
     managerId?: string | null;
     status?: AccountStatus;
     temporaryPassword?: string;
+    avatar?: string;
   }) {
-    return this.request<{ user: User; temporaryPassword: string; message: string }>('/api/users', {
-      method: 'POST',
-      body: JSON.stringify(userData),
-    });
+    try {
+      return await this.request<{ user: User; temporaryPassword: string; message: string }>('/api/users', {
+        method: 'POST',
+        body: JSON.stringify(userData),
+      });
+    } catch (err: any) {
+      // If server returned a business validation conflict (Duplicate email or ID), rethrow with clean message
+      if (err.status === 409 || err.code === 'EmailConflict' || err.code === 'EmployeeIdConflict') {
+        throw err;
+      }
+      // On static deployments, Vercel edge failures, or network issues, execute with local client store
+      return clientLocalCreateUser(userData);
+    }
   },
 
   async updateUser(id: string, updates: Partial<User>) {
@@ -196,9 +267,13 @@ export const apiClient = {
   },
 
   async deleteUser(id: string) {
-    return this.request<{ success: boolean; message: string }>(`/api/users/${id}`, {
-      method: 'DELETE',
-    });
+    try {
+      return await this.request<{ success: boolean; message: string }>(`/api/users/${id}`, {
+        method: 'DELETE',
+      });
+    } catch {
+      return clientLocalDeleteUser(id);
+    }
   },
 
   async getPendingApprovals() {
@@ -211,16 +286,24 @@ export const apiClient = {
   },
 
   async decideApproval(id: string, decision: 'APPROVE' | 'REJECT', notes?: string) {
-    return this.request<{ user: User; message: string }>(`/api/users/approvals/${id}/decision`, {
-      method: 'POST',
-      body: JSON.stringify({ decision, notes }),
-    });
+    try {
+      return await this.request<{ user: User; message: string }>(`/api/users/approvals/${id}/decision`, {
+        method: 'POST',
+        body: JSON.stringify({ decision, notes }),
+      });
+    } catch {
+      return clientLocalDecideApproval(id, decision, notes);
+    }
   },
 
   async resetUserPassword(id: string) {
-    return this.request<{ temporaryPassword: string; message: string }>(`/api/users/${id}/reset-password`, {
-      method: 'POST',
-    });
+    try {
+      return await this.request<{ temporaryPassword: string; message: string }>(`/api/users/${id}/reset-password`, {
+        method: 'POST',
+      });
+    } catch {
+      return clientLocalResetPassword(id);
+    }
   },
 
   // Tasks
@@ -266,24 +349,36 @@ export const apiClient = {
   },
 
   async updateTaskStatus(id: string, status?: TaskStatus, progress?: number) {
-    return this.request<{ task: Task }>(`/api/tasks/${id}/status`, {
-      method: 'PATCH',
-      body: JSON.stringify({ status, progress }),
-    });
+    try {
+      return await this.request<{ task: Task }>(`/api/tasks/${id}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status, progress }),
+      });
+    } catch {
+      return clientLocalUpdateTaskStatus(id, status, progress);
+    }
   },
 
   async addTaskComment(id: string, content: string) {
-    return this.request<{ task: Task }>(`/api/tasks/${id}/comments`, {
-      method: 'POST',
-      body: JSON.stringify({ content }),
-    });
+    try {
+      return await this.request<{ task: Task }>(`/api/tasks/${id}/comments`, {
+        method: 'POST',
+        body: JSON.stringify({ content }),
+      });
+    } catch {
+      return clientLocalAddTaskComment(id, content);
+    }
   },
 
   async addTaskAttachment(id: string, name: string, sizeBytes?: number) {
-    return this.request<{ task: Task }>(`/api/tasks/${id}/attachments`, {
-      method: 'POST',
-      body: JSON.stringify({ name, sizeBytes }),
-    });
+    try {
+      return await this.request<{ task: Task }>(`/api/tasks/${id}/attachments`, {
+        method: 'POST',
+        body: JSON.stringify({ name, sizeBytes }),
+      });
+    } catch {
+      return clientLocalAddTaskAttachment(id, name, sizeBytes);
+    }
   },
 
   // Manager Specific Endpoints

@@ -131,7 +131,7 @@ export function groupTasksBySchedule(tasks: Task[], todayRef: Date = new Date())
     const taskKey = getTaskDateKey(task.dueDate);
     if (!taskKey) continue;
 
-    const isOverdue = isTaskOverdue(task.dueDate, task.status);
+    const isOverdue = isTaskOverdue(task.dueDate, task.status, todayRef);
 
     if (isOverdue) {
       groups.overdue.push(task);

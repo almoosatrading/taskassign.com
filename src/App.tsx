@@ -24,7 +24,7 @@ import {
 } from 'lucide-react';
 import { Language, Task, TaskCategory, TaskPriority, TaskStatus, User, UserRole, AuditLog, NotificationItem } from './types';
 import { translations } from './i18n/translations';
-import { apiClient } from './api/client';
+import { apiClient, extractErrorMessage } from './api/client';
 import { Header } from './components/Header';
 import { TaskCard } from './components/TaskCard';
 import { TaskDetailModal } from './components/TaskDetailModal';
@@ -83,9 +83,10 @@ export default function App() {
   const [feedbackMessage, setFeedbackMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
 
   // Show auto-dismissing feedback banner
-  const notifyFeedback = (text: string, type: 'success' | 'error' = 'success') => {
-    setFeedbackMessage({ text, type });
-    setTimeout(() => setFeedbackMessage(null), 4000);
+  const notifyFeedback = (text: any, type: 'success' | 'error' = 'success') => {
+    const cleanMsg = extractErrorMessage(text);
+    setFeedbackMessage({ text: cleanMsg, type });
+    setTimeout(() => setFeedbackMessage(null), 5000);
   };
 
   // Refresh all application data according to active role permissions
@@ -454,13 +455,26 @@ export default function App() {
   const handleAddEmployee = async (newUser: Omit<User, 'id'>) => {
     try {
       const res = await apiClient.createUser(newUser);
-      setUsers((prev) => [...prev, res.user]);
+      setUsers((prev) => {
+        const exists = prev.some((u) => u.id === res.user.id || u.email.toLowerCase() === res.user.email.toLowerCase());
+        if (exists) {
+          return prev.map((u) => (u.id === res.user.id ? res.user : u));
+        }
+        return [...prev, res.user];
+      });
+
+      const passNotice = res.temporaryPassword ? ` (${language === 'ar' ? 'كلمة المرور المؤقتة' : 'Temporary Password'}: ${res.temporaryPassword})` : '';
       notifyFeedback(
-        language === 'ar' ? `تم إنشاء حساب ${res.user.nameAr} بنجاح` : `Account for ${res.user.name} created successfully`
+        language === 'ar'
+          ? `تم إنشاء حساب ${res.user.nameAr} بنجاح${passNotice}`
+          : `Account for ${res.user.name} created successfully${passNotice}`
       );
       await loadAppData();
+      return res;
     } catch (err: any) {
-      notifyFeedback(err.message || 'Failed to create user', 'error');
+      const msg = extractErrorMessage(err);
+      notifyFeedback(msg, 'error');
+      throw err;
     }
   };
 

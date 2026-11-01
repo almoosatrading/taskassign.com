@@ -46,4 +46,16 @@ app.get('/api/health', (req: Request, res: Response) => {
   });
 });
 
+// Centralized JSON error handler ensuring clean string error payloads
+app.use((err: any, req: Request, res: Response, next: any) => {
+  console.error('[API Serverless Error]', err);
+  const status = typeof err.status === 'number' ? err.status : 500;
+  const message = typeof err.message === 'string' && err.message ? err.message : 'Internal Server Error';
+  const code = typeof err.code === 'string' ? err.code : 'InternalError';
+  res.status(status).json({
+    error: code,
+    message,
+  });
+});
+
 export default app;

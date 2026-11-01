@@ -6,7 +6,7 @@
       "nameAr": "طارق الموسى",
       "employeeId": "EMP-0001",
       "email": "almoosatradinghrd@gmail.com",
-      "passwordHash": "$2b$10$z6/tfASzoGdgbWfIS0ix9uviNKjKTqOf3ORV9EFSLHUM1ghsj7O8G",
+      "passwordHash": "$2b$10$axmOanUJN2zOtClzpbBAyONP5.uCWM.vYkmpguOhKxHlbSEOkdN/i",
       "role": "ADMIN",
       "department": "Executive HR & Administration",
       "departmentAr": "الموارد البشرية والإدارة التنفيذية",
@@ -196,6 +196,28 @@
       "emailVerified": true,
       "createdAt": "2026-10-01T08:00:00Z",
       "createdBy": "usr-admin-001"
+    },
+    {
+      "id": "usr-914050",
+      "name": "Faisal Al-Harbi",
+      "nameAr": "فيصل الحربي",
+      "email": "f.harbi@almoosa.com.sa",
+      "employeeId": "EMP-0240",
+      "passwordHash": "$2b$10$.LFjG.TE9fuincR1bpZ79u2Jtfx8pf8ZPDq67ShvJyWUxRGrDS6gu",
+      "role": "EMPLOYEE",
+      "department": "Marketing & Commercial Operations",
+      "departmentAr": "التسويق والعمليات التجارية",
+      "jobTitle": "Commercial Logistics Specialist",
+      "jobTitleAr": "Commercial Logistics Specialist",
+      "managerId": "usr-sarah",
+      "avatar": "https://images.unsplash.com/photo-1534528742250?w=150&auto=format&fit=crop&q=80",
+      "status": "ACTIVE",
+      "mustChangePassword": true,
+      "emailVerified": true,
+      "createdAt": "2026-11-01T10:39:39.140Z",
+      "createdBy": "usr-admin-001",
+      "approvedBy": "usr-admin-001",
+      "approvalDate": "2026-11-01T10:39:39.140Z"
     }
   ],
   "tasks": [
@@ -408,6 +430,35 @@
     }
   ],
   "auditLogs": [
+    {
+      "id": "log-1793529579142-141",
+      "timestamp": "2026-11-01T10:39:39.142Z",
+      "actorId": "usr-admin-001",
+      "actorName": "Tariq Al-Moosa",
+      "actorRole": "ADMIN",
+      "action": "USER_CREATE",
+      "actionAr": "إنشاء حساب موظف",
+      "details": "Created EMPLOYEE account Faisal Al-Harbi (EMP-0240), status: ACTIVE",
+      "detailsAr": "تم إنشاء حساب EMPLOYEE لـ فيصل الحربي (EMP-0240) بحالة: ACTIVE",
+      "targetRecordId": "usr-914050",
+      "category": "DIRECTORY",
+      "status": "SUCCESS",
+      "ipAddress": "127.0.0.1"
+    },
+    {
+      "id": "log-1793529540428",
+      "timestamp": "2026-11-01T10:39:00.428Z",
+      "actorId": "usr-admin-001",
+      "actorName": "Tariq Al-Moosa",
+      "actorRole": "ADMIN",
+      "action": "LOGIN_SUCCESS",
+      "actionAr": "تسجيل دخول ناجح",
+      "details": "User almoosatradinghrd@gmail.com successfully signed in with role ADMIN",
+      "detailsAr": "تم تسجيل الدخول بنجاح للمستخدم almoosatradinghrd@gmail.com بصلاحية ADMIN",
+      "category": "AUTH",
+      "status": "SUCCESS",
+      "ipAddress": "127.0.0.1"
+    },
     {
       "id": "log-1793528008463-221",
       "timestamp": "2026-11-01T10:13:28.463Z",

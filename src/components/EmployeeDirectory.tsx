@@ -25,6 +25,7 @@ import {
 import { Language, User, UserRole, AccountStatus } from '../types';
 import { translations } from '../i18n/translations';
 import { AccountStatusBadge, RoleBadge } from './Badge';
+import { extractErrorMessage } from '../api/client';
 
 const PRESET_AVATARS = [
   'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=256&auto=format&fit=crop&q=80',
@@ -41,7 +42,7 @@ interface EmployeeDirectoryProps {
   users: User[];
   currentUser: User;
   language: Language;
-  onAddEmployee: (newUser: Omit<User, 'id'> & { temporaryPassword?: string }) => void;
+  onAddEmployee: (newUser: Omit<User, 'id'> & { temporaryPassword?: string }) => Promise<any> | any;
   onUpdateEmployee: (id: string, updates: Partial<User>) => void;
   onUpdateAvatar?: (userId: string, avatar: string) => Promise<void>;
   onToggleStatus: (userId: string, newStatus: AccountStatus) => void;
@@ -159,6 +160,8 @@ export const EmployeeDirectory: React.FC<EmployeeDirectoryProps> = ({
   const [jobTitleAr, setJobTitleAr] = useState('');
   const [managerId, setManagerId] = useState<string>('usr-sarah');
   const [initialStatus, setInitialStatus] = useState<AccountStatus>('ACTIVE');
+  const [addError, setAddError] = useState<string>('');
+  const [isSubmittingAdd, setIsSubmittingAdd] = useState<boolean>(false);
 
   // Edit Employee Form State
   const [editName, setEditName] = useState('');
@@ -227,34 +230,50 @@ export const EmployeeDirectory: React.FC<EmployeeDirectoryProps> = ({
     setEditingUser(null);
   };
 
-  const handleAddSubmit = (e: React.FormEvent) => {
+  const handleAddSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name || !email || !employeeId || !jobTitle) return;
+    if (!name.trim() || !email.trim() || !employeeId.trim() || !jobTitle.trim()) {
+      setAddError(language === 'ar' ? 'يرجى ملء جميع الحقول المطلوبة' : 'Please fill in all required fields');
+      return;
+    }
 
-    onAddEmployee({
-      name: name.trim(),
-      nameAr: nameAr.trim() || name.trim(),
-      email: email.trim(),
-      employeeId: employeeId.trim().toUpperCase(),
-      role,
-      department: department.trim(),
-      departmentAr: departmentAr.trim() || department.trim(),
-      jobTitle: jobTitle.trim(),
-      jobTitleAr: jobTitleAr.trim() || jobTitle.trim(),
-      managerId: role === 'ADMIN' ? null : managerId || null,
-      avatar: `https://images.unsplash.com/photo-${1534528741775 + Math.floor(Math.random() * 500)}?w=150&auto=format&fit=crop&q=80`,
-      status: initialStatus,
-      mustChangePassword: true,
-    });
+    try {
+      setIsSubmittingAdd(true);
+      setAddError('');
+      const res: any = await onAddEmployee({
+        name: name.trim(),
+        nameAr: nameAr.trim() || name.trim(),
+        email: email.trim(),
+        employeeId: employeeId.trim().toUpperCase(),
+        role,
+        department: department.trim(),
+        departmentAr: departmentAr.trim() || department.trim(),
+        jobTitle: jobTitle.trim(),
+        jobTitleAr: jobTitleAr.trim() || jobTitle.trim(),
+        managerId: role === 'ADMIN' ? null : managerId || null,
+        avatar: `https://images.unsplash.com/photo-${1534528741775 + Math.floor(Math.random() * 500)}?w=150&auto=format&fit=crop&q=80`,
+        status: initialStatus,
+        mustChangePassword: true,
+      });
 
-    setShowAddModal(false);
-    // Reset inputs
-    setName('');
-    setNameAr('');
-    setEmail('');
-    setEmployeeId('');
-    setJobTitle('');
-    setJobTitleAr('');
+      if (res?.temporaryPassword) {
+        setTempPassAlert({ user: res.user || { name: name.trim(), nameAr: nameAr.trim() || name.trim() } as User, pass: res.temporaryPassword });
+      }
+
+      setShowAddModal(false);
+      // Reset inputs
+      setName('');
+      setNameAr('');
+      setEmail('');
+      setEmployeeId('');
+      setJobTitle('');
+      setJobTitleAr('');
+      setAddError('');
+    } catch (err: any) {
+      setAddError(extractErrorMessage(err));
+    } finally {
+      setIsSubmittingAdd(false);
+    }
   };
 
   return (
@@ -504,6 +523,16 @@ export const EmployeeDirectory: React.FC<EmployeeDirectoryProps> = ({
             </div>
 
             <form onSubmit={handleAddSubmit} className="p-6 space-y-3.5 text-xs">
+              {addError && (
+                <div className="p-3.5 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-300 dark:border-rose-800 flex items-start gap-2.5 text-rose-800 dark:text-rose-200 animate-in fade-in">
+                  <AlertCircle className="w-4 h-4 shrink-0 text-rose-600 dark:text-rose-400 mt-0.5" />
+                  <div className="flex-1">
+                    <span className="font-bold block">{language === 'ar' ? 'تعذر إنشاء الحساب' : 'Unable to create account'}</span>
+                    <span className="text-[11px] opacity-90">{addError}</span>
+                  </div>
+                </div>
+              )}
+
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
@@ -652,9 +681,12 @@ export const EmployeeDirectory: React.FC<EmployeeDirectoryProps> = ({
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold cursor-pointer"
+                  disabled={isSubmittingAdd}
+                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold cursor-pointer transition-opacity"
                 >
-                  {t.confirmCreateEmployee}
+                  {isSubmittingAdd
+                    ? (language === 'ar' ? 'جاري الإنشاء...' : 'Creating...')
+                    : t.confirmCreateEmployee}
                 </button>
               </div>
             </form>

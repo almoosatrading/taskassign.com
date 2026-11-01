@@ -4,7 +4,7 @@
  * Ensures 100% functionality on static hosts, Vercel SPA deployments, or when API is unreachable.
  */
 
-import { Task, User, AuditLog, NotificationItem, TaskPriority, TaskCategory, TaskStatus, AccountStatus } from '../types';
+import { Task, User, UserRole, AuditLog, NotificationItem, TaskPriority, TaskCategory, TaskStatus, AccountStatus } from '../types';
 
 const STORAGE_KEY = 'almoosa_hr_local_store_v1';
 const CURRENT_USER_KEY = 'almoosa_hr_current_user_v1';
@@ -465,3 +465,185 @@ export function clientLocalAllocateTask(employeeId: string, taskData: any, calle
   saveLocalStore(store);
   return newTask;
 }
+
+export function clientLocalCreateUser(userData: {
+  name: string;
+  nameAr?: string;
+  email: string;
+  employeeId: string;
+  role: UserRole;
+  department?: string;
+  departmentAr?: string;
+  jobTitle?: string;
+  jobTitleAr?: string;
+  managerId?: string | null;
+  status?: AccountStatus;
+  temporaryPassword?: string;
+  avatar?: string;
+}): { user: User; temporaryPassword: string; message: string } {
+  const store = loadLocalStore();
+  const cleanEmail = userData.email.trim().toLowerCase();
+  const cleanEmpId = userData.employeeId.trim().toUpperCase();
+
+  // Validate duplicate email
+  const existingEmail = store.users.find((u) => u.email.trim().toLowerCase() === cleanEmail);
+  if (existingEmail) {
+    const conflictErr: any = new Error('An account with this company email already exists');
+    conflictErr.code = 'EmailConflict';
+    conflictErr.status = 409;
+    throw conflictErr;
+  }
+
+  // Validate duplicate employee ID
+  const existingId = store.users.find((u) => u.employeeId.trim().toUpperCase() === cleanEmpId);
+  if (existingId) {
+    const conflictErr: any = new Error('An account with this Employee ID already exists');
+    conflictErr.code = 'EmployeeIdConflict';
+    conflictErr.status = 409;
+    throw conflictErr;
+  }
+
+  const newId = `usr-${Date.now().toString().slice(-4)}${Math.floor(Math.random() * 100)}`;
+  const passToUse = userData.temporaryPassword || `AlMoosa!${Math.floor(1000 + Math.random() * 9000)}`;
+
+  const newUser: User = {
+    id: newId,
+    name: userData.name.trim(),
+    nameAr: userData.nameAr?.trim() || userData.name.trim(),
+    email: userData.email.trim(),
+    employeeId: cleanEmpId,
+    role: userData.role || 'EMPLOYEE',
+    department: userData.department?.trim() || 'General Operations',
+    departmentAr: userData.departmentAr?.trim() || userData.department?.trim() || 'العمليات العامة',
+    jobTitle: userData.jobTitle?.trim() || 'Staff Member',
+    jobTitleAr: userData.jobTitleAr?.trim() || userData.jobTitle?.trim() || 'عضو فريق',
+    managerId: userData.role === 'ADMIN' ? null : (userData.managerId || null),
+    avatar: userData.avatar || `https://images.unsplash.com/photo-${1534528741775 + Math.floor(Math.random() * 800)}?w=150&auto=format&fit=crop&q=80`,
+    status: userData.status || 'ACTIVE',
+    mustChangePassword: true,
+    emailVerified: true,
+  };
+
+  store.users.push(newUser);
+
+  // Add audit log
+  const caller = clientLocalGetMe() || { id: 'usr-admin-001', name: 'Tariq Al-Moosa', role: 'ADMIN' as UserRole };
+  const audit: AuditLog = {
+    id: `log-${Date.now()}`,
+    timestamp: new Date().toISOString(),
+    actorId: caller.id,
+    actorName: caller.name,
+    actorRole: caller.role,
+    action: 'USER_CREATE',
+    actionAr: 'إنشاء حساب موظف',
+    details: `Created ${newUser.role} account ${newUser.name} (${newUser.employeeId}), status: ${newUser.status}`,
+    detailsAr: `تم إنشاء حساب ${newUser.role} لـ ${newUser.nameAr} (${newUser.employeeId}) بحالة: ${newUser.status}`,
+    category: 'DIRECTORY',
+    status: 'SUCCESS',
+    ipAddress: '127.0.0.1',
+    targetRecordId: newUser.id,
+  };
+  store.auditLogs.unshift(audit);
+
+  saveLocalStore(store);
+
+  return {
+    user: newUser,
+    temporaryPassword: passToUse,
+    message: 'Account created successfully',
+  };
+}
+
+export function clientLocalDeleteUser(id: string): { success: boolean; message: string } {
+  const store = loadLocalStore();
+  const target = store.users.find((u) => u.id === id);
+  if (!target) throw new Error('User not found');
+  if (target.id === 'usr-admin-001' || target.email === 'almoosatradinghrd@gmail.com') {
+    throw new Error('Primary Admin account cannot be removed');
+  }
+
+  store.users = store.users.filter((u) => u.id !== id);
+  saveLocalStore(store);
+  return { success: true, message: 'User account removed successfully' };
+}
+
+export function clientLocalResetPassword(id: string): { temporaryPassword: string; message: string } {
+  const store = loadLocalStore();
+  const target = store.users.find((u) => u.id === id);
+  if (!target) throw new Error('User not found');
+
+  const tempPass = `AlMoosa!${Math.floor(1000 + Math.random() * 9000)}`;
+  target.mustChangePassword = true;
+  saveLocalStore(store);
+  return { temporaryPassword: tempPass, message: 'Password reset successfully' };
+}
+
+export function clientLocalDecideApproval(id: string, decision: 'APPROVE' | 'REJECT', notes?: string): { user: User; message: string } {
+  const store = loadLocalStore();
+  const target = store.users.find((u) => u.id === id);
+  if (!target) throw new Error('User not found');
+
+  target.status = decision === 'APPROVE' ? 'ACTIVE' : 'REJECTED';
+  saveLocalStore(store);
+  return { user: target, message: `Account ${decision.toLowerCase()}d successfully` };
+}
+
+export function clientLocalUpdateTaskStatus(id: string, status?: TaskStatus, progress?: number): { task: Task } {
+  const store = loadLocalStore();
+  const task = store.tasks.find((t) => t.id === id);
+  if (!task) throw new Error('Task not found');
+
+  if (status) task.status = status;
+  if (progress !== undefined) task.progress = progress;
+  task.updatedAt = new Date().toISOString();
+
+  saveLocalStore(store);
+  return { task };
+}
+
+export function clientLocalAddTaskComment(id: string, content: string, caller?: User): { task: Task } {
+  const store = loadLocalStore();
+  const task = store.tasks.find((t) => t.id === id);
+  if (!task) throw new Error('Task not found');
+
+  const user = caller || clientLocalGetMe() || { id: 'usr-admin-001', name: 'Tariq Al-Moosa', role: 'ADMIN' as UserRole };
+  const newComment = {
+    id: `com-${Date.now()}`,
+    userId: user.id,
+    userName: user.name,
+    userRole: user.role,
+    content: content.trim(),
+    createdAt: new Date().toISOString(),
+  };
+
+  task.comments = task.comments || [];
+  task.comments.push(newComment);
+  task.updatedAt = new Date().toISOString();
+
+  saveLocalStore(store);
+  return { task };
+}
+
+export function clientLocalAddTaskAttachment(id: string, name: string, sizeBytes?: number): { task: Task } {
+  const store = loadLocalStore();
+  const task = store.tasks.find((t) => t.id === id);
+  if (!task) throw new Error('Task not found');
+
+  const caller = clientLocalGetMe() || { id: 'usr-admin-001', name: 'Tariq Al-Moosa', role: 'ADMIN' as const };
+  task.attachments = task.attachments || [];
+  task.attachments.push({
+    id: `att-${Date.now()}`,
+    name,
+    sizeBytes: sizeBytes || 120 * 1024,
+    type: 'application/octet-stream',
+    url: '#',
+    uploadedAt: new Date().toISOString(),
+    uploadedById: caller.id,
+    uploadedByName: caller.name,
+  });
+  task.updatedAt = new Date().toISOString();
+
+  saveLocalStore(store);
+  return { task };
+}
+
