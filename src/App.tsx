@@ -1221,6 +1221,7 @@ export default function App() {
                 language={language}
                 onAddEmployee={handleAddEmployee}
                 onUpdateEmployee={handleUpdateEmployee}
+                onUpdateAvatar={handleUpdateAvatar}
                 onToggleStatus={handleToggleStatus}
                 onResetPassword={handleResetPassword}
                 onDeleteUser={handleDeleteUser}

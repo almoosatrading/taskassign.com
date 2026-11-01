@@ -54,7 +54,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
     setLoading(true);
 
     try {
-      const data = await apiClient.login(email.trim(), password);
+      const data = await apiClient.login(email.trim(), password.trim());
       onLoginSuccess(data.user);
     } catch (err: any) {
       if (err.accountStatus === 'PENDING_APPROVAL') {

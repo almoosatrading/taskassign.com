@@ -55,6 +55,7 @@ export const EmployeeDirectory: React.FC<EmployeeDirectoryProps> = ({
   language,
   onAddEmployee,
   onUpdateEmployee,
+  onUpdateAvatar,
   onToggleStatus,
   onResetPassword,
   onDeleteUser,
@@ -68,6 +69,83 @@ export const EmployeeDirectory: React.FC<EmployeeDirectoryProps> = ({
   const [tempPassAlert, setTempPassAlert] = useState<{ user: User; pass: string } | null>(null);
   const [copiedPass, setCopiedPass] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+
+  // Dedicated Admin Photo Modal State
+  const [photoModalUser, setPhotoModalUser] = useState<User | null>(null);
+  const [selectedPhoto, setSelectedPhoto] = useState<string>('');
+  const [customPhotoUrl, setCustomPhotoUrl] = useState<string>('');
+  const [photoError, setPhotoError] = useState<string>('');
+  const [isSavingPhoto, setIsSavingPhoto] = useState<boolean>(false);
+
+  const handleOpenPhotoModal = (user: User) => {
+    setPhotoModalUser(user);
+    setSelectedPhoto(user.avatar);
+    setCustomPhotoUrl('');
+    setPhotoError('');
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      setPhotoError('Please select a valid image file (PNG, JPG, WebP)');
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      setPhotoError('Image size exceeds 5MB limit');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const rawDataUrl = event.target?.result as string;
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const size = 256;
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          const minDim = Math.min(img.width, img.height);
+          const sx = (img.width - minDim) / 2;
+          const sy = (img.height - minDim) / 2;
+          ctx.drawImage(img, sx, sy, minDim, minDim, 0, 0, size, size);
+          setSelectedPhoto(canvas.toDataURL('image/jpeg', 0.85));
+          setPhotoError('');
+        } else {
+          setSelectedPhoto(rawDataUrl);
+        }
+      };
+      img.src = rawDataUrl;
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleSavePhoto = async () => {
+    if (!photoModalUser) return;
+    const finalAvatar = (customPhotoUrl.trim() || selectedPhoto).trim();
+    if (!finalAvatar) {
+      setPhotoError('Please select or upload a photo');
+      return;
+    }
+
+    try {
+      setIsSavingPhoto(true);
+      if (onUpdateAvatar) {
+        await onUpdateAvatar(photoModalUser.id, finalAvatar);
+      } else {
+        onUpdateEmployee(photoModalUser.id, { avatar: finalAvatar });
+      }
+      setPhotoModalUser(null);
+    } catch (err: any) {
+      setPhotoError(err.message || 'Failed to update employee photo');
+    } finally {
+      setIsSavingPhoto(false);
+    }
+  };
 
   // New Employee Form State
   const [name, setName] = useState('');
@@ -288,11 +366,23 @@ export const EmployeeDirectory: React.FC<EmployeeDirectoryProps> = ({
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2.5">
-                        <img
-                          src={emp.avatar}
-                          alt={emp.name}
-                          className="w-8 h-8 rounded-lg object-cover ring-1 ring-slate-200 dark:ring-slate-700"
-                        />
+                        <div className="relative group/avatar shrink-0">
+                          <img
+                            src={emp.avatar}
+                            alt={emp.name}
+                            className="w-9 h-9 rounded-xl object-cover ring-1 ring-slate-200 dark:ring-slate-700 shadow-2xs"
+                          />
+                          {isAdmin && (
+                            <button
+                              type="button"
+                              onClick={() => handleOpenPhotoModal(emp)}
+                              title={t.changeEmployeePhoto}
+                              className="absolute -bottom-1 -right-1 p-1 rounded-full bg-emerald-600 text-white shadow-xs opacity-75 group-hover/avatar:opacity-100 hover:scale-110 transition-all cursor-pointer"
+                            >
+                              <Camera className="w-2.5 h-2.5" />
+                            </button>
+                          )}
+                        </div>
                         <div>
                           <div className="font-bold text-slate-900 dark:text-white">
                             {language === 'ar' ? emp.nameAr : emp.name}
@@ -325,10 +415,19 @@ export const EmployeeDirectory: React.FC<EmployeeDirectoryProps> = ({
                       <AccountStatusBadge status={emp.status} lang={language} />
                     </td>
 
-                    {/* Admin Actions: Edit, Password Reset, Status Toggle, Delete */}
+                    {/* Admin Actions: Change Photo, Edit, Password Reset, Status Toggle, Delete */}
                     {isAdmin && (
                       <td className="px-4 py-3 text-end">
                         <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenPhotoModal(emp)}
+                            title={t.changeEmployeePhoto}
+                            className="p-1.5 rounded-lg text-slate-500 hover:text-emerald-600 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+                          >
+                            <Camera className="w-3.5 h-3.5" />
+                          </button>
+
                           <button
                             onClick={() => handleOpenEdit(emp)}
                             title={t.editUserBtn}
@@ -711,6 +810,190 @@ export const EmployeeDirectory: React.FC<EmployeeDirectoryProps> = ({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* DEDICATED CHANGE EMPLOYEE PHOTO MODAL (ADMIN ONLY) */}
+      {photoModalUser && (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 animate-in fade-in">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="photo-modal-title"
+            className="relative bg-white dark:bg-slate-900 rounded-3xl max-w-lg w-full shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col"
+          >
+            {/* Modal Header */}
+            <div className="px-6 py-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50/70 dark:bg-slate-800/40">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+                  <Camera className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 id="photo-modal-title" className="text-base font-extrabold text-slate-900 dark:text-white">
+                    {t.changeEmployeePhoto}
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    {language === 'ar' ? photoModalUser.nameAr : photoModalUser.name} • {photoModalUser.employeeId}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPhotoModalUser(null)}
+                className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-5 text-xs">
+              {/* Photo Comparison Preview */}
+              <div className="flex items-center justify-center gap-6 py-2 bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-slate-100 dark:border-slate-800">
+                <div className="text-center space-y-1.5">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                    {t.currentPhoto}
+                  </span>
+                  <div className="relative mx-auto w-16 h-16 rounded-2xl overflow-hidden ring-2 ring-slate-200 dark:ring-slate-700 shadow-xs">
+                    <img
+                      src={photoModalUser.avatar}
+                      alt="Current"
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                </div>
+
+                <div className="text-slate-300 dark:text-slate-600">→</div>
+
+                <div className="text-center space-y-1.5">
+                  <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">
+                    {t.newPhotoPreview}
+                  </span>
+                  <div className="relative mx-auto w-16 h-16 rounded-2xl overflow-hidden ring-3 ring-emerald-500 shadow-md">
+                    <img
+                      src={customPhotoUrl.trim() || selectedPhoto || photoModalUser.avatar}
+                      alt="New Preview"
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {photoError && (
+                <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-xs font-semibold flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>{photoError}</span>
+                </div>
+              )}
+
+              {/* Option 1: File Upload */}
+              <div className="space-y-2">
+                <label className="block font-bold text-slate-700 dark:text-slate-300">
+                  {t.uploadPhoto}
+                </label>
+                <label className="flex flex-col items-center justify-center p-4 border-2 border-dashed border-slate-200 dark:border-slate-700 hover:border-emerald-500 dark:hover:border-emerald-500 rounded-2xl bg-white dark:bg-slate-800/60 transition-colors cursor-pointer group">
+                  <Upload className="w-6 h-6 text-slate-400 group-hover:text-emerald-600 transition-colors mb-1" />
+                  <span className="text-xs font-bold text-slate-700 dark:text-slate-300 group-hover:text-emerald-600">
+                    Click to browse image file
+                  </span>
+                  <span className="text-[10px] text-slate-400 mt-0.5">
+                    {t.uploadPhotoDesc}
+                  </span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleFileUpload}
+                    className="hidden"
+                  />
+                </label>
+              </div>
+
+              {/* Option 2: Curated Corporate Presets */}
+              <div className="space-y-2">
+                <label className="block font-bold text-slate-700 dark:text-slate-300">
+                  {t.selectPresetAvatar}
+                </label>
+                <div className="grid grid-cols-4 sm:grid-cols-8 gap-2">
+                  {PRESET_AVATARS.map((avatarUrl, idx) => {
+                    const isSelected = selectedPhoto === avatarUrl && !customPhotoUrl.trim();
+                    return (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => {
+                          setSelectedPhoto(avatarUrl);
+                          setCustomPhotoUrl('');
+                          setPhotoError('');
+                        }}
+                        className={`relative rounded-xl overflow-hidden aspect-square border-2 transition-all cursor-pointer ${
+                          isSelected
+                            ? 'border-emerald-600 ring-2 ring-emerald-500/50 scale-105'
+                            : 'border-slate-200 dark:border-slate-700 hover:border-slate-400 opacity-80 hover:opacity-100'
+                        }`}
+                      >
+                        <img
+                          src={avatarUrl}
+                          alt={`Preset ${idx + 1}`}
+                          className="w-full h-full object-cover"
+                        />
+                        {isSelected && (
+                          <div className="absolute inset-0 bg-emerald-600/30 flex items-center justify-center">
+                            <Check className="w-3.5 h-3.5 text-white stroke-[3]" />
+                          </div>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Option 3: Direct URL */}
+              <div className="space-y-1">
+                <label className="block font-bold text-slate-700 dark:text-slate-300">
+                  {t.photoUrlLabel}
+                </label>
+                <input
+                  type="url"
+                  value={customPhotoUrl}
+                  onChange={(e) => {
+                    setCustomPhotoUrl(e.target.value);
+                    setPhotoError('');
+                  }}
+                  placeholder={t.photoUrlPlaceholder}
+                  className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white placeholder-slate-400 text-xs focus:outline-hidden focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+
+              <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 text-[11px] text-slate-500">
+                {t.adminOnlyPhotoNotice}
+              </div>
+            </div>
+
+            {/* Modal Actions */}
+            <div className="px-6 py-4 bg-slate-50 dark:bg-slate-800/40 border-t border-slate-100 dark:border-slate-800 flex justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={() => setPhotoModalUser(null)}
+                className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 font-bold text-xs cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700"
+              >
+                {t.cancel}
+              </button>
+              <button
+                type="button"
+                disabled={isSavingPhoto}
+                onClick={handleSavePhoto}
+                className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-md shadow-emerald-900/15 cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+              >
+                {isSavingPhoto ? (
+                  <span>{t.loading}</span>
+                ) : (
+                  <>
+                    <Check className="w-3.5 h-3.5" />
+                    <span>{t.savePhotoBtn}</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}
